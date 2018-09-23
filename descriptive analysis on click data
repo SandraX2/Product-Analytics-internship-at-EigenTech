@@ -1,0 +1,182 @@
+import pandas as pd
+from src.db.connector import ConnectionPool
+import logging
+import json
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from matplotlib import rcParams
+rcParams['font.sans-serif'] = ['SimHei']
+
+# connect to SQL
+logger = logging.getLogger(__name__)
+class QueryStatistics(object):
+    _DB_Query = 'searchengine'
+
+    def __init__(self):
+        self.conn_pool = ConnectionPool()
+        self.conn = self.conn_pool.get_connection(self._DB_Query)
+
+    def __del__(self):
+        self.conn_pool.release_connection(self._DB_Query)
+
+    def generate_data_frame(self):
+        print(self.conn_pool.connections)
+        sql = """select query_id, from_unixtime(query_commit_time,'%y-%m-%d') commit_time, query_context 
+                 from search_engine_statistics where year(from_unixtime(query_commit_time,'%y-%m-%d'))=2018;"""
+        logger.info(sql)
+        df = pd.read_sql(sql, self.conn)
+        logger.info('Load df size %d' % len(df))
+        return df
+
+qs = QueryStatistics()
+df = qs.generate_data_frame()
+
+# extract 'app' from query_context
+query_app = []
+for i in range(len(df['query_context'])):
+    if json.loads(df['query_context'].iloc[i]).__contains__('app'):
+        query_app.append(json.loads(df['query_context'].iloc[i])['app'])
+df['query_app'] = pd.DataFrame(query_app)
+
+# extract 'query' from query_context
+query_content = []
+for i in range(len(df['query_context'])):
+    if json.loads(df['query_context'].iloc[i]).__contains__('query'):
+        query_content.append(json.loads(df['query_context'].iloc[i])['query'])
+df['query_content'] = pd.DataFrame(query_content)
+
+# extract 'source' frin query_context
+query_source = []
+for i in range(len(df['query_context'])):
+    if json.loads(df['query_context'].iloc[i]).__contains__('source'):
+        query_content.append(json.loads(df['query_context'].iloc[i])['source'])
+df['query_source'] = pd.DataFrame(query_content)
+
+# Analysis 1: app traffic flow distribution
+frequency_app = dict(df['query_id'].groupby(df['query_app']).count())
+x1 = frequency_app.keys()
+y1 = frequency_app.values()
+plt.bar(x1, y1)
+plt.xlabel('query_app')
+plt.ylabel('frequency')
+plt.xticks(rotation=90)
+plt.show()
+
+# Analysis 2: app traffic flow time series trend (times searched>10000)
+high_frequency_app = {}
+for key, val in frequency_app.items():
+    if val > 10000:
+        high_frequency_app[key] = val
+
+df_1 = df[df['query_app'] == 'fashion_article']
+df_2 = df[df['query_app'] == 'images_search_images']
+df_3 = df[df['query_app'] == 'images_search_skus']
+df_4 = df[df['query_app'] == 'search_images']
+df_5 = df[df['query_app'] == 'search_images_meta']
+df_6 = df[df['query_app'] == 'jiemodui']
+df_7 = df[df['query_app'] == 'jiemodui_company']
+
+
+frequency_df_1 = df_1['query_id'].groupby(df_1['commit_time']).count()
+frequency_df_2 = df_2['query_id'].groupby(df_2['commit_time']).count()
+frequency_df_3 = df_3['query_id'].groupby(df_3['commit_time']).count()
+frequency_df_4 = df_4['query_id'].groupby(df_4['commit_time']).count()
+frequency_df_5 = df_5['query_id'].groupby(df_5['commit_time']).count()
+frequency_df_6 = df_6['query_id'].groupby(df_6['commit_time']).count()
+frequency_df_7 = df_7['query_id'].groupby(df_7['commit_time']).count()
+
+
+tick_spacing = 24
+fig, ax1 = plt.subplots(1, 1)
+plt.plot(frequency_df_2, color='green')
+plt.plot(frequency_df_3, color='blue')
+plt.plot(frequency_df_4, color='black')
+plt.plot(frequency_df_5, color='yellow')
+plt.xlabel('query_commit_time')
+plt.xticks(rotation=90)
+plt.xticks(fontsize=8)
+plt.xlabel('query_commit_time (by day)')
+plt.ylabel('query_frequency')
+plt.title('Search Frequency of Different Apps in Time Series (by day)')
+plt.legend(['images_search_images', 'images_search_skus',
+            'search_images', 'search_images_meta'])
+plt.ylim(0, 3000)
+ax1.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+plt.show()
+
+fig, ax2 = plt.subplots(1, 1)
+plt.plot(frequency_df_1, color='red')
+plt.xlabel('query_commit_time')
+plt.xticks(rotation=90)
+plt.xticks(fontsize=8)
+plt.xlabel('query_commit_time (by day)')
+plt.ylabel('query_frequency')
+plt.title('Search Frequency of Different Apps in Time Series (by day)')
+plt.legend(['fashion_article'])
+plt.ylim(0, 20000)
+ax2.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+plt.show()
+
+
+# Analysis 3: app traffic flow trend in 24 hours (only fashion related app)
+fig, ax3 = plt.subplots(1, 1)
+plt.plot(frequency_df_2, color='green')
+plt.plot(frequency_df_3, color='blue')
+plt.plot(frequency_df_4, color='black')
+plt.plot(frequency_df_5, color='yellow')
+plt.xlabel('query_commit_time')
+plt.xticks(rotation=90)
+plt.xticks(fontsize=8)
+plt.xlabel('query_commit_time (by hour)')
+plt.ylabel('query_frequency')
+plt.title('Search Frequency of Different Apps in Time Series (hour)')
+plt.legend(['images_search_images', 'images_search_skus',
+            'search_images', 'search_images_meta'])
+plt.show()
+
+fig, ax4 = plt.subplots(1, 1)
+plt.plot(frequency_df_1, color='red')
+plt.xlabel('query_commit_time')
+plt.xticks(rotation=90)
+plt.xticks(fontsize=8)
+plt.xlabel('query_commit_time (by hour)')
+plt.ylabel('query_frequency')
+plt.title('Search Frequency of Different Apps in Time Series (hour)')
+plt.legend(['fashion_article'])
+plt.show()
+
+
+# Analysis 4: app word frequency
+word_frequency_df_1 = df_1['query_id'].groupby(df_1['query_content']).count().sort_values()
+word_frequency_df_2 = df_2['query_id'].groupby(df_2['query_content']).count().sort_values()
+word_frequency_df_3 = df_3['query_id'].groupby(df_3['query_content']).count().sort_values()
+word_frequency_df_4 = df_4['query_id'].groupby(df_4['query_content']).count().sort_values()
+word_frequency_df_5 = df_5['query_id'].groupby(df_5['query_content']).count().sort_values()
+
+
+f = open("fashion_article.txt", 'w')
+f.write(str(word_frequency_df_1)+'\n')
+f.close()
+
+f = open("images_search_images.txt", 'w')
+f.write(str(word_frequency_df_2)+'\n')
+f.close()
+
+f = open("images_search_skus.txt", 'w')
+f.write(str(word_frequency_df_3)+'\n')
+f.close()
+
+f = open("search_images.txt", 'w')
+f.write(str(word_frequency_df_4)+'\n')
+f.close()
+
+f = open("search_images_meta.txt", 'w')
+f.write(str(word_frequency_df_5)+'\n')
+f.close()
+
+
+
+
+
+
+
